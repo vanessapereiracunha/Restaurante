@@ -17,7 +17,16 @@ const PORT = process.env.PORT || 3000;
 // RNF1: cabecalhos de seguranca
 app.use(
   helmet({
-    contentSecurityPolicy: false, // mantido simples para nao bloquear o frontend vanilla servido pelo proprio app
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "cdn.tailwindcss.com"],
+        styleSrc: ["'self'", "'unsafe-inline'", "fonts.googleapis.com", "cdn.tailwindcss.com"],
+        fontSrc: ["'self'", "fonts.gstatic.com"],
+        connectSrc: ["'self'", "wss:", "ws:"],
+        imgSrc: ["'self'", "data:"],
+      },
+    },
   })
 );
 app.use(cors());
