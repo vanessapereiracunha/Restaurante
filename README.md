@@ -102,3 +102,6 @@ RF1 (QR Code por mesa), RF2 (página web responsiva), RF3 (status do pedido),
 RF4 (atualização automática via WebSocket), RF5 (notificação interna em tempo
 real), RF6 (sem login), RF7 (HTTPS em produção), RF8 (multi-dispositivo), RF9
 (histórico básico de pedidos).
+
+##Teste
+O token de acesso utilizado no painel da cozinha é : cozinha123
