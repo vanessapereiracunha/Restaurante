@@ -105,3 +105,5 @@ real), RF6 (sem login), RF7 (HTTPS em produção), RF8 (multi-dispositivo), RF9
 
 ##Teste
 O token de acesso utilizado no painel da cozinha é : cozinha123
+Após colocar o codigo crie um pedido 
+Volte para painem principal e clique nas mesas testes  de que foi criado o pedido
