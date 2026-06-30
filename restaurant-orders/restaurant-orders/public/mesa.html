@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Acompanhar Pedido</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="eyebrow"><span class="conn-dot off" id="connDot"></span><span id="connText">conectando...</span></div>
+
+  <div class="ticket">
+    <div class="ticket-head">
+      <div class="table-label" id="tableLabel">—</div>
+      <div class="order-id" id="orderId">pedido —</div>
+    </div>
+
+    <div class="status-stamp">
+      <div class="label" id="statusLabel">—</div>
+      <div class="desc" id="statusDesc">—</div>
+    </div>
+
+    <div class="progress-track">
+      <div class="step" id="step-aguardando">Aguardando</div>
+      <div class="step" id="step-preparo">Em preparo</div>
+      <div class="step" id="step-pronto">Pronto</div>
+    </div>
+  </div>
+
+  <div class="footnote">atualiza automaticamente · não recarregue a página</div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const code = window.location.pathname.split('/').pop().toUpperCase();
+    const STATUS_TEXT = {
+      aguardando: 'Aguardando preparo',
+      preparo: 'Em preparo',
+      pronto: 'Pronto para retirada/consumo',
+    };
+
+    const tableLabelEl = document.getElementById('tableLabel');
+    const orderIdEl = document.getElementById('orderId');
+    const statusLabelEl = document.getElementById('statusLabel');
+    const statusDescEl = document.getElementById('statusDesc');
+    const connDot = document.getElementById('connDot');
+    const connText = document.getElementById('connText');
+
+    function renderStatus(status) {
+      statusLabelEl.textContent = STATUS_TEXT[status] || '—';
+      statusLabelEl.className = 'label state-' + status;
+
+      const descByStatus = {
+        aguardando: 'Seu pedido foi recebido pela cozinha.',
+        preparo: 'A cozinha já está preparando seu pedido.',
+        pronto: 'Seu pedido está pronto! Pode retirar/consumir.',
+      };
+      statusDescEl.textContent = descByStatus[status] || 'Aguardando informações do pedido.';
+
+      ['aguardando', 'preparo', 'pronto'].forEach((s) => {
+        const el = document.getElementById('step-' + s);
+        el.classList.remove('done', 'active');
+      });
+      const order = ['aguardando', 'preparo', 'pronto'];
+      const idx = order.indexOf(status);
+      order.forEach((s, i) => {
+        const el = document.getElementById('step-' + s);
+        if (i < idx) el.classList.add('done');
+        if (i === idx) el.classList.add('active');
+      });
+    }
+
+    async function loadTableAndOrder() {
+      try {
+        const tableRes = await fetch(`/api/tables/${code}`);
+        if (!tableRes.ok) {
+          tableLabelEl.textContent = 'Mesa não encontrada';
+          return;
+        }
+        const table = await tableRes.json();
+        tableLabelEl.textContent = table.label;
+
+        const orderRes = await fetch(`/api/tables/${code}/order`);
+        const data = await orderRes.json();
+        if (data.order) {
+          orderIdEl.textContent = 'pedido #' + data.order.id;
+          renderStatus(data.order.status);
+        } else {
+          orderIdEl.textContent = 'nenhum pedido ainda';
+          statusLabelEl.textContent = 'Sem pedido em andamento';
+          statusLabelEl.className = 'label state-aguardando';
+          statusDescEl.textContent = 'Assim que o garçom registrar seu pedido, ele aparecerá aqui.';
+        }
+      } catch (e) {
+        statusDescEl.textContent = 'Erro ao carregar informações do pedido.';
+      }
+    }
+
+    const socket = io();
+    socket.on('connect', () => {
+      connDot.classList.remove('off');
+      connText.textContent = 'em tempo real';
+      socket.emit('join:table', code);
+    });
+    socket.on('disconnect', () => {
+      connDot.classList.add('off');
+      connText.textContent = 'reconectando...';
+    });
+    socket.on('order:status_updated', (payload) => {
+      renderStatus(payload.status);
+    });
+
+    loadTableAndOrder();
+  </script>
+</body>
+</html>

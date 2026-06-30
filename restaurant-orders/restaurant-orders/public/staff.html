@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel da Cozinha</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+  <div id="loginScreen" class="login-card">
+    <div class="eyebrow" style="color:var(--ink-soft)">acesso interno</div>
+    <input type="password" id="tokenInput" placeholder="Token de acesso do staff" />
+    <button id="loginBtn" class="action-btn">Entrar</button>
+    <div id="loginError" style="color:#b5483f; font-size:12px; margin-top:8px; font-family:var(--mono);"></div>
+  </div>
+
+  <div id="panel" class="staff-shell" style="display:none">
+    <div class="staff-header">
+      <h1>Painel da Cozinha</h1>
+      <span class="eyebrow" style="margin:0"><span class="conn-dot off" id="connDot"></span><span id="connText">conectando...</span></span>
+    </div>
+    <div id="ordersList"></div>
+    <div id="emptyState" class="empty-state" style="display:none">Nenhum pedido ativo no momento.</div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const STATUS_TEXT = {
+      aguardando: 'Aguardando preparo',
+      preparo: 'Em preparo',
+      pronto: 'Pronto',
+    };
+    const NEXT_STATUS = { aguardando: 'preparo', preparo: 'pronto' };
+    const NEXT_LABEL = { aguardando: 'Iniciar preparo', preparo: 'Marcar como pronto' };
+
+    let token = sessionStorage.getItem('staffToken') || '';
+    let socket;
+
+    const loginScreen = document.getElementById('loginScreen');
+    const panel = document.getElementById('panel');
+    const ordersList = document.getElementById('ordersList');
+    const emptyState = document.getElementById('emptyState');
+    const connDot = document.getElementById('connDot');
+    const connText = document.getElementById('connText');
+
+    document.getElementById('loginBtn').addEventListener('click', () => {
+      token = document.getElementById('tokenInput').value.trim();
+      attemptLogin();
+    });
+
+    async function attemptLogin() {
+      const res = await fetch('/api/staff/orders', { headers: { 'x-staff-token': token } });
+      if (!res.ok) {
+        document.getElementById('loginError').textContent = 'Token inválido. Tente novamente.';
+        return;
+      }
+      sessionStorage.setItem('staffToken', token);
+      loginScreen.style.display = 'none';
+      panel.style.display = 'block';
+      initSocket();
+      renderOrders(await res.json());
+    }
+
+    function initSocket() {
+      socket = io();
+      socket.on('connect', () => {
+        connDot.classList.remove('off');
+        connText.textContent = 'em tempo real';
+        socket.emit('join:staff', token);
+      });
+      socket.on('disconnect', () => {
+        connDot.classList.add('off');
+        connText.textContent = 'reconectando...';
+      });
+      socket.on('staff:new_order', () => refreshOrders());
+      socket.on('staff:status_changed', () => refreshOrders());
+    }
+
+    async function refreshOrders() {
+      const res = await fetch('/api/staff/orders', { headers: { 'x-staff-token': token } });
+      if (res.ok) renderOrders(await res.json());
+    }
+
+    function renderOrders(orders) {
+      ordersList.innerHTML = '';
+      emptyState.style.display = orders.length === 0 ? 'block' : 'none';
+
+      orders.forEach((order) => {
+        const card = document.createElement('div');
+        card.className = 'order-card';
+
+        const nextStatus = NEXT_STATUS[order.status];
+        const itemsText = order.description || 'sem descrição';
+
+        card.innerHTML = `
+          <div class="meta">
+            <div class="table">${order.table_label} · #${order.id}</div>
+            <div class="desc">${itemsText}</div>
+          </div>
+          <span class="badge state-${order.status}">${STATUS_TEXT[order.status]}</span>
+          ${nextStatus ? `<button class="action-btn" data-id="${order.id}" data-next="${nextStatus}">${NEXT_LABEL[order.status]}</button>` : ''}
+        `;
+        ordersList.appendChild(card);
+      });
+
+      document.querySelectorAll('button[data-id]').forEach((btn) => {
+        btn.addEventListener('click', () => updateStatus(btn.dataset.id, btn.dataset.next));
+      });
+    }
+
+    async function updateStatus(orderId, status) {
+      await fetch(`/api/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-staff-token': token },
+        body: JSON.stringify({ status }),
+      });
+      refreshOrders();
+    }
+
+    if (token) attemptLogin();
+  </script>
+</body>
+</html>
