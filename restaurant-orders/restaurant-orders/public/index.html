@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RestaurantOS — Sistema de Pedidos</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#C8592A', light: '#E8764A', dark: '#9C3F1A' },
+            cream: { DEFAULT: '#FAF5EC', dark: '#F0E8D5' },
+            charcoal: { DEFAULT: '#1E1E1E', soft: '#2D2D2D' },
+          },
+          fontFamily: {
+            display: ['"Playfair Display"', 'serif'],
+            body: ['Inter', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .display { font-family: 'Playfair Display', serif; }
+    @keyframes fadeUp { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes pulse-ring { 0%,100%{transform:scale(1);opacity:.6} 50%{transform:scale(1.15);opacity:.2} }
+    .fade-up { animation: fadeUp .6s ease both; }
+    .fade-up-2 { animation: fadeUp .6s .15s ease both; }
+    .fade-up-3 { animation: fadeUp .6s .3s ease both; }
+    .pulse-ring { animation: pulse-ring 2s infinite; }
+  </style>
+</head>
+<body class="bg-charcoal min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden">
+
+  <!-- Background decorativo -->
+  <div class="absolute inset-0 overflow-hidden pointer-events-none">
+    <div class="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-brand/10 blur-3xl"></div>
+    <div class="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-brand/8 blur-3xl"></div>
+  </div>
+
+  <div class="relative z-10 w-full max-w-sm text-center">
+
+    <!-- Logo / Icon -->
+    <div class="fade-up flex justify-center mb-8">
+      <div class="relative">
+        <div class="pulse-ring absolute inset-0 rounded-full bg-brand/30"></div>
+        <div class="relative w-20 h-20 rounded-full bg-brand flex items-center justify-center shadow-2xl">
+          <span class="text-4xl">🍽️</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Título -->
+    <h1 class="display text-4xl font-black text-cream fade-up-2 leading-tight mb-2">
+      Restaurant<span class="text-brand">OS</span>
+    </h1>
+    <p class="text-cream/50 text-sm tracking-widest uppercase fade-up-2 mb-10">
+      Sistema de Pedidos em Tempo Real
+    </p>
+
+    <!-- Cards de acesso -->
+    <div class="space-y-3 fade-up-3">
+
+      <a href="/staff"
+        class="flex items-center gap-4 w-full bg-brand hover:bg-brand-light active:bg-brand-dark
+               text-white rounded-2xl px-6 py-4 transition-all duration-200
+               shadow-lg hover:shadow-brand/40 hover:-translate-y-0.5 group">
+        <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-xl flex-shrink-0">👨‍🍳</div>
+        <div class="text-left">
+          <div class="font-semibold text-sm">Painel da Cozinha</div>
+          <div class="text-white/70 text-xs">Acesso para funcionários</div>
+        </div>
+        <svg class="ml-auto w-5 h-5 opacity-70 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+      </a>
+
+      <div class="flex items-center gap-4 w-full bg-charcoal-soft border border-white/10
+                  rounded-2xl px-6 py-4 text-left">
+        <div class="w-10 h-10 rounded-xl bg-cream/10 flex items-center justify-center text-xl flex-shrink-0">📱</div>
+        <div>
+          <div class="font-semibold text-sm text-cream">Área do Cliente</div>
+          <div class="text-cream/50 text-xs">Escaneie o QR Code da sua mesa</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- QR Codes disponíveis -->
+    <div class="mt-8 fade-up-3">
+      <p class="text-cream/30 text-xs mb-3 tracking-wide uppercase">Testar como cliente</p>
+      <div id="tableLinks" class="flex flex-wrap gap-2 justify-center"></div>
+    </div>
+
+  </div>
+
+  <script>
+    fetch('/api/tables', { headers: { 'x-staff-token': 'cozinha123' } })
+      .then(r => r.json()).then(tables => {
+        const container = document.getElementById('tableLinks');
+        tables.slice(0, 5).forEach(t => {
+          const a = document.createElement('a');
+          a.href = `/mesa/${t.code}`;
+          a.textContent = t.label;
+          a.className = 'text-xs bg-white/5 hover:bg-brand/30 text-cream/60 hover:text-cream border border-white/10 rounded-full px-3 py-1 transition-all duration-200';
+          container.appendChild(a);
+        });
+      }).catch(() => {});
+  </script>
+</body>
+</html>

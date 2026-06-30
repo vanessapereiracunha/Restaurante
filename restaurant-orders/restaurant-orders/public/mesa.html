@@ -1,115 +1,229 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Acompanhar Pedido</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#C8592A', light: '#E8764A' },
+            cream: { DEFAULT: '#FAF5EC' },
+            charcoal: { DEFAULT: '#1E1E1E', soft: '#2A2A2A' },
+            waiting: '#6B7280',
+            cooking: '#D97706',
+            ready: '#16A34A',
+          },
+          fontFamily: {
+            display: ['"Playfair Display"', 'serif'],
+            body: ['Inter', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    @keyframes fadeUp { from { opacity:0; transform:translateY(20px);} to { opacity:1; transform:translateY(0);} }
+    @keyframes ping-slow { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0} }
+    @keyframes status-in { from{opacity:0;transform:scale(.92)} to{opacity:1;transform:scale(1)} }
+    .fade-up { animation: fadeUp .5s ease both; }
+    .ping-slow { animation: ping-slow 2s infinite; }
+    .status-in { animation: status-in .4s cubic-bezier(.34,1.56,.64,1) both; }
+
+    .step-line::before {
+      content:''; position:absolute; top:50%; left:calc(-50% + 12px); right:calc(50% + 12px);
+      height:2px; background:#374151; z-index:0;
+    }
+    .step-line.done::before { background:#16A34A; }
+    .step-line.active::before { background: linear-gradient(to right, #16A34A, #D97706); }
+  </style>
 </head>
-<body>
-  <div class="eyebrow"><span class="conn-dot off" id="connDot"></span><span id="connText">conectando...</span></div>
+<body class="bg-charcoal min-h-screen font-body">
 
-  <div class="ticket">
-    <div class="ticket-head">
-      <div class="table-label" id="tableLabel">—</div>
-      <div class="order-id" id="orderId">pedido —</div>
-    </div>
-
-    <div class="status-stamp">
-      <div class="label" id="statusLabel">—</div>
-      <div class="desc" id="statusDesc">—</div>
-    </div>
-
-    <div class="progress-track">
-      <div class="step" id="step-aguardando">Aguardando</div>
-      <div class="step" id="step-preparo">Em preparo</div>
-      <div class="step" id="step-pronto">Pronto</div>
+  <!-- Header -->
+  <div class="bg-charcoal-soft border-b border-white/10 px-4 py-3 flex items-center justify-between">
+    <span class="font-display text-cream font-bold text-lg">Restaurant<span class="text-brand">OS</span></span>
+    <div class="flex items-center gap-2">
+      <div id="connDot" class="w-2 h-2 rounded-full bg-gray-500 transition-colors duration-500"></div>
+      <span id="connText" class="text-xs text-cream/40">conectando...</span>
     </div>
   </div>
 
-  <div class="footnote">atualiza automaticamente · não recarregue a página</div>
+  <div class="max-w-sm mx-auto px-4 py-8 space-y-6">
 
-  <script src="/socket.io/socket.io.js"></script>
+    <!-- Mesa info -->
+    <div class="fade-up text-center">
+      <p class="text-cream/40 text-xs tracking-widest uppercase mb-1">você está na</p>
+      <h1 id="tableLabel" class="font-display text-4xl font-black text-cream">—</h1>
+      <p id="orderId" class="text-cream/30 text-xs mt-1 font-mono">carregando...</p>
+    </div>
+
+    <!-- Card de status -->
+    <div id="statusCard" class="fade-up bg-charcoal-soft rounded-3xl border border-white/10 p-6 text-center shadow-2xl">
+
+      <!-- Ícone animado -->
+      <div class="relative flex justify-center mb-5">
+        <div id="statusRing" class="absolute w-20 h-20 rounded-full opacity-20 ping-slow"></div>
+        <div id="statusIcon" class="relative w-20 h-20 rounded-full flex items-center justify-center text-4xl bg-white/5">
+          ⏳
+        </div>
+      </div>
+
+      <div id="statusLabel" class="text-2xl font-bold text-cream mb-2 status-in">—</div>
+      <div id="statusDesc" class="text-cream/50 text-sm leading-relaxed">—</div>
+
+    </div>
+
+    <!-- Barra de progresso -->
+    <div class="fade-up bg-charcoal-soft rounded-2xl border border-white/10 p-5">
+      <p class="text-cream/30 text-xs tracking-widest uppercase mb-4 text-center">progresso do pedido</p>
+      <div class="flex items-center justify-between relative">
+
+        <div class="flex flex-col items-center gap-2 z-10" id="prog-aguardando">
+          <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-500 text-sm bg-charcoal border-gray-600 text-gray-600">1</div>
+          <span class="text-xs text-gray-500 text-center w-16">Aguardando</span>
+        </div>
+
+        <div class="flex-1 h-0.5 bg-gray-700 mx-1 transition-all duration-700" id="line-1"></div>
+
+        <div class="flex flex-col items-center gap-2 z-10" id="prog-preparo">
+          <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-500 text-sm bg-charcoal border-gray-600 text-gray-600">2</div>
+          <span class="text-xs text-gray-500 text-center w-16">Em preparo</span>
+        </div>
+
+        <div class="flex-1 h-0.5 bg-gray-700 mx-1 transition-all duration-700" id="line-2"></div>
+
+        <div class="flex flex-col items-center gap-2 z-10" id="prog-pronto">
+          <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-500 text-sm bg-charcoal border-gray-600 text-gray-600">3</div>
+          <span class="text-xs text-gray-500 text-center w-16">Pronto</span>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Toast de atualização -->
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-green-800 text-white text-sm px-5 py-3 rounded-full shadow-xl opacity-0 transition-opacity duration-300 pointer-events-none">
+      ✅ Status atualizado!
+    </div>
+
+  </div>
+
   <script>
     const code = window.location.pathname.split('/').pop().toUpperCase();
-    const STATUS_TEXT = {
-      aguardando: 'Aguardando preparo',
-      preparo: 'Em preparo',
-      pronto: 'Pronto para retirada/consumo',
+
+    const STATUS = {
+      aguardando: {
+        label: 'Aguardando preparo',
+        desc: 'Seu pedido foi recebido. A cozinha logo começará.',
+        icon: '⏳', color: 'amber', ring: 'bg-amber-500',
+        iconBg: 'bg-amber-500/10',
+      },
+      preparo: {
+        label: 'Em preparo',
+        desc: 'Sua comida está sendo preparada com carinho!',
+        icon: '👨‍🍳', color: 'orange', ring: 'bg-orange-500',
+        iconBg: 'bg-orange-500/10',
+      },
+      pronto: {
+        label: 'Pronto! 🎉',
+        desc: 'Seu pedido está pronto para retirada ou será entregue em instantes.',
+        icon: '✅', color: 'green', ring: 'bg-green-500',
+        iconBg: 'bg-green-500/10',
+      },
     };
 
-    const tableLabelEl = document.getElementById('tableLabel');
-    const orderIdEl = document.getElementById('orderId');
-    const statusLabelEl = document.getElementById('statusLabel');
-    const statusDescEl = document.getElementById('statusDesc');
-    const connDot = document.getElementById('connDot');
-    const connText = document.getElementById('connText');
+    const STEPS = ['aguardando', 'preparo', 'pronto'];
+    const COLORS = {
+      aguardando: { dot: 'border-amber-500 text-amber-500 bg-amber-500/10', line: 'bg-amber-500' },
+      preparo:    { dot: 'border-orange-500 text-orange-500 bg-orange-500/10', line: 'bg-orange-500' },
+      pronto:     { dot: 'border-green-500 text-green-500 bg-green-500/10', line: 'bg-green-500' },
+    };
 
     function renderStatus(status) {
-      statusLabelEl.textContent = STATUS_TEXT[status] || '—';
-      statusLabelEl.className = 'label state-' + status;
+      const s = STATUS[status];
+      if (!s) return;
 
-      const descByStatus = {
-        aguardando: 'Seu pedido foi recebido pela cozinha.',
-        preparo: 'A cozinha já está preparando seu pedido.',
-        pronto: 'Seu pedido está pronto! Pode retirar/consumir.',
-      };
-      statusDescEl.textContent = descByStatus[status] || 'Aguardando informações do pedido.';
+      // Card
+      document.getElementById('statusLabel').textContent = s.label;
+      document.getElementById('statusDesc').textContent = s.desc;
+      document.getElementById('statusIcon').textContent = s.icon;
+      document.getElementById('statusIcon').className = `relative w-20 h-20 rounded-full flex items-center justify-center text-4xl ${s.iconBg} status-in`;
+      document.getElementById('statusRing').className = `absolute w-20 h-20 rounded-full opacity-20 ping-slow ${s.ring}`;
 
-      ['aguardando', 'preparo', 'pronto'].forEach((s) => {
-        const el = document.getElementById('step-' + s);
-        el.classList.remove('done', 'active');
+      // Progresso
+      const idx = STEPS.indexOf(status);
+      STEPS.forEach((step, i) => {
+        const el = document.getElementById(`prog-${step}`).querySelector('div');
+        const baseClasses = 'w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-500 text-sm';
+        if (i < idx) {
+          el.className = `${baseClasses} border-green-500 text-green-500 bg-green-500/10`;
+          el.textContent = '✓';
+        } else if (i === idx) {
+          el.className = `${baseClasses} ${COLORS[step].dot}`;
+          el.textContent = i + 1;
+        } else {
+          el.className = `${baseClasses} border-gray-600 text-gray-600 bg-charcoal`;
+          el.textContent = i + 1;
+        }
+        const label = document.getElementById(`prog-${step}`).querySelector('span');
+        label.className = `text-xs text-center w-16 transition-colors duration-500 ${i <= idx ? 'text-cream/70' : 'text-gray-500'}`;
       });
-      const order = ['aguardando', 'preparo', 'pronto'];
-      const idx = order.indexOf(status);
-      order.forEach((s, i) => {
-        const el = document.getElementById('step-' + s);
-        if (i < idx) el.classList.add('done');
-        if (i === idx) el.classList.add('active');
-      });
+      const line1 = document.getElementById('line-1');
+      const line2 = document.getElementById('line-2');
+      line1.className = `flex-1 h-0.5 mx-1 transition-all duration-700 ${idx >= 1 ? 'bg-green-500' : 'bg-gray-700'}`;
+      line2.className = `flex-1 h-0.5 mx-1 transition-all duration-700 ${idx >= 2 ? 'bg-green-500' : 'bg-gray-700'}`;
     }
 
-    async function loadTableAndOrder() {
-      try {
-        const tableRes = await fetch(`/api/tables/${code}`);
-        if (!tableRes.ok) {
-          tableLabelEl.textContent = 'Mesa não encontrada';
-          return;
-        }
-        const table = await tableRes.json();
-        tableLabelEl.textContent = table.label;
+    function showToast() {
+      const t = document.getElementById('toast');
+      t.style.opacity = '1';
+      setTimeout(() => t.style.opacity = '0', 3000);
+    }
 
-        const orderRes = await fetch(`/api/tables/${code}/order`);
-        const data = await orderRes.json();
-        if (data.order) {
-          orderIdEl.textContent = 'pedido #' + data.order.id;
-          renderStatus(data.order.status);
-        } else {
-          orderIdEl.textContent = 'nenhum pedido ainda';
-          statusLabelEl.textContent = 'Sem pedido em andamento';
-          statusLabelEl.className = 'label state-aguardando';
-          statusDescEl.textContent = 'Assim que o garçom registrar seu pedido, ele aparecerá aqui.';
-        }
-      } catch (e) {
-        statusDescEl.textContent = 'Erro ao carregar informações do pedido.';
+    async function load() {
+      const tableRes = await fetch(`/api/tables/${code}`).catch(() => null);
+      if (!tableRes?.ok) { document.getElementById('tableLabel').textContent = 'Mesa não encontrada'; return; }
+      const table = await tableRes.json();
+      document.getElementById('tableLabel').textContent = table.label;
+
+      const orderRes = await fetch(`/api/tables/${code}/order`);
+      const data = await orderRes.json();
+      if (data.order) {
+        document.getElementById('orderId').textContent = `pedido #${data.order.id}`;
+        renderStatus(data.order.status);
+      } else {
+        document.getElementById('orderId').textContent = 'nenhum pedido ativo';
+        document.getElementById('statusLabel').textContent = 'Sem pedido ainda';
+        document.getElementById('statusDesc').textContent = 'Assim que o garçom registrar seu pedido, ele aparecerá aqui automaticamente.';
+        document.getElementById('statusIcon').textContent = '🔔';
       }
     }
 
     const socket = io();
+    const connDot = document.getElementById('connDot');
+    const connText = document.getElementById('connText');
+
     socket.on('connect', () => {
-      connDot.classList.remove('off');
+      connDot.className = 'w-2 h-2 rounded-full bg-green-400 transition-colors duration-500';
       connText.textContent = 'em tempo real';
       socket.emit('join:table', code);
     });
     socket.on('disconnect', () => {
-      connDot.classList.add('off');
+      connDot.className = 'w-2 h-2 rounded-full bg-red-400 transition-colors duration-500';
       connText.textContent = 'reconectando...';
     });
-    socket.on('order:status_updated', (payload) => {
-      renderStatus(payload.status);
+    socket.on('order:status_updated', ({ status }) => {
+      renderStatus(status);
+      showToast();
     });
 
-    loadTableAndOrder();
+    load();
   </script>
 </body>
 </html>

@@ -1,124 +1,325 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Painel da Cozinha</title>
-  <link rel="stylesheet" href="/styles.css" />
-</head>
-<body>
-
-  <div id="loginScreen" class="login-card">
-    <div class="eyebrow" style="color:var(--ink-soft)">acesso interno</div>
-    <input type="password" id="tokenInput" placeholder="Token de acesso do staff" />
-    <button id="loginBtn" class="action-btn">Entrar</button>
-    <div id="loginError" style="color:#b5483f; font-size:12px; margin-top:8px; font-family:var(--mono);"></div>
-  </div>
-
-  <div id="panel" class="staff-shell" style="display:none">
-    <div class="staff-header">
-      <h1>Painel da Cozinha</h1>
-      <span class="eyebrow" style="margin:0"><span class="conn-dot off" id="connDot"></span><span id="connText">conectando...</span></span>
-    </div>
-    <div id="ordersList"></div>
-    <div id="emptyState" class="empty-state" style="display:none">Nenhum pedido ativo no momento.</div>
-  </div>
-
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Painel da Cozinha — RestaurantOS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const STATUS_TEXT = {
-      aguardando: 'Aguardando preparo',
-      preparo: 'Em preparo',
-      pronto: 'Pronto',
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#C8592A', light: '#E8764A', dark: '#9C3F1A' },
+            cream: { DEFAULT: '#FAF5EC' },
+            charcoal: { DEFAULT: '#1E1E1E', soft: '#252525', card: '#2A2A2A' },
+          },
+          fontFamily: {
+            display: ['"Playfair Display"', 'serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    @keyframes slideIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
+    .slide-in { animation: slideIn .35s ease both; }
+    .shake { animation: shake .3s ease; }
+    @keyframes bell { 0%,100%{transform:rotate(0)} 20%{transform:rotate(-15deg)} 40%{transform:rotate(15deg)} 60%{transform:rotate(-10deg)} 80%{transform:rotate(10deg)} }
+    .bell { animation: bell .5s ease; }
+  </style>
+</head>
+<body class="bg-charcoal min-h-screen">
+
+  <!-- TELA DE LOGIN -->
+  <div id="loginScreen" class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-xs">
+      <div class="text-center mb-8">
+        <div class="w-16 h-16 rounded-2xl bg-brand flex items-center justify-center text-3xl mx-auto mb-4 shadow-xl">👨‍🍳</div>
+        <h1 class="font-display text-3xl font-black text-cream">Restaurant<span class="text-brand">OS</span></h1>
+        <p class="text-cream/40 text-sm mt-1">Painel da Cozinha</p>
+      </div>
+
+      <div class="bg-charcoal-soft rounded-3xl border border-white/10 p-6 shadow-2xl">
+        <label class="block text-cream/60 text-xs font-medium mb-2 tracking-wider uppercase">Token de acesso</label>
+        <input id="tokenInput" type="password" placeholder="••••••••••"
+          class="w-full bg-charcoal border border-white/10 text-cream rounded-xl px-4 py-3 text-sm
+                 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-all mb-3"/>
+        <div id="loginError" class="text-red-400 text-xs mb-3 hidden">Token inválido. Tente novamente.</div>
+        <button id="loginBtn"
+          class="w-full bg-brand hover:bg-brand-light active:bg-brand-dark text-white font-semibold
+                 rounded-xl py-3 text-sm transition-all duration-200 shadow-lg hover:shadow-brand/30">
+          Entrar na Cozinha
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAINEL PRINCIPAL -->
+  <div id="panel" class="hidden min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <div class="bg-charcoal-soft border-b border-white/10 px-6 py-4 flex items-center justify-between sticky top-0 z-30">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl" id="bellIcon">👨‍🍳</span>
+        <div>
+          <h1 class="font-display text-xl font-bold text-cream">Painel da Cozinha</h1>
+          <p class="text-cream/40 text-xs" id="orderCount">carregando pedidos...</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2">
+          <div id="connDot" class="w-2 h-2 rounded-full bg-gray-500 transition-colors duration-300"></div>
+          <span id="connText" class="text-xs text-cream/40 hidden sm:block">conectando...</span>
+        </div>
+        <button id="newOrderBtn"
+          class="bg-brand hover:bg-brand-light text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all duration-200 hidden sm:block">
+          + Novo Pedido
+        </button>
+      </div>
+    </div>
+
+    <!-- Conteúdo -->
+    <div class="flex-1 p-4 sm:p-6 max-w-3xl mx-auto w-full">
+
+      <!-- Tabs -->
+      <div class="flex gap-2 mb-5">
+        <button id="tabAtivos" onclick="setTab('ativos')"
+          class="tab-btn active-tab px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200">
+          Ativos
+        </button>
+        <button id="tabHistorico" onclick="setTab('historico')"
+          class="tab-btn px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 text-cream/40 hover:text-cream/70">
+          Histórico
+        </button>
+      </div>
+
+      <div id="ordersList" class="space-y-3"></div>
+      <div id="emptyState" class="hidden text-center py-20">
+        <div class="text-6xl mb-4">🎉</div>
+        <p class="text-cream/40 font-medium">Nenhum pedido ativo</p>
+        <p class="text-cream/20 text-sm mt-1">Todos os pedidos foram entregues!</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL: Novo Pedido -->
+  <div id="newOrderModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+    <div class="bg-charcoal-card border border-white/10 rounded-3xl w-full max-w-sm p-6 shadow-2xl">
+      <h2 class="font-display text-xl font-bold text-cream mb-4">Novo Pedido</h2>
+
+      <label class="block text-cream/60 text-xs font-medium mb-2 tracking-wider uppercase">Mesa</label>
+      <select id="modalTable"
+        class="w-full bg-charcoal border border-white/10 text-cream rounded-xl px-4 py-3 text-sm mb-4 focus:outline-none focus:border-brand">
+      </select>
+
+      <label class="block text-cream/60 text-xs font-medium mb-2 tracking-wider uppercase">Descrição do pedido</label>
+      <textarea id="modalDesc" rows="3" placeholder="Ex: 2x X-Burguer, 1x Coca-Cola..."
+        class="w-full bg-charcoal border border-white/10 text-cream rounded-xl px-4 py-3 text-sm mb-4
+               focus:outline-none focus:border-brand resize-none placeholder:text-cream/20"></textarea>
+
+      <div class="flex gap-3">
+        <button onclick="closeModal()"
+          class="flex-1 border border-white/10 text-cream/60 hover:text-cream rounded-xl py-3 text-sm transition-all">
+          Cancelar
+        </button>
+        <button id="saveOrderBtn"
+          class="flex-1 bg-brand hover:bg-brand-light text-white font-semibold rounded-xl py-3 text-sm transition-all">
+          Registrar Pedido
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 text-sm px-5 py-3 rounded-full shadow-xl opacity-0 transition-all duration-300 pointer-events-none z-50 bg-green-700 text-white whitespace-nowrap">
+    ✅ Pedido atualizado!
+  </div>
+
+  <style>
+    .active-tab { background: #C8592A; color: white; }
+    .tab-btn:not(.active-tab) { background: transparent; color: rgba(250,245,236,0.4); }
+  </style>
+
+  <script>
+    const STATUS_TEXT = { aguardando: 'Aguardando', preparo: 'Em preparo', pronto: 'Pronto ✓' };
+    const STATUS_COLORS = {
+      aguardando: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+      preparo: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+      pronto: 'bg-green-500/15 text-green-400 border-green-500/30',
     };
-    const NEXT_STATUS = { aguardando: 'preparo', preparo: 'pronto' };
-    const NEXT_LABEL = { aguardando: 'Iniciar preparo', preparo: 'Marcar como pronto' };
+    const NEXT = { aguardando: { status: 'preparo', label: 'Iniciar Preparo', cls: 'bg-orange-600 hover:bg-orange-500' },
+                   preparo:    { status: 'pronto',  label: 'Marcar como Pronto', cls: 'bg-green-700 hover:bg-green-600' } };
 
     let token = sessionStorage.getItem('staffToken') || '';
-    let socket;
+    let socket, currentTab = 'ativos';
 
-    const loginScreen = document.getElementById('loginScreen');
-    const panel = document.getElementById('panel');
-    const ordersList = document.getElementById('ordersList');
-    const emptyState = document.getElementById('emptyState');
-    const connDot = document.getElementById('connDot');
-    const connText = document.getElementById('connText');
+    document.getElementById('tokenInput').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+    document.getElementById('loginBtn').addEventListener('click', login);
 
-    document.getElementById('loginBtn').addEventListener('click', () => {
+    async function login() {
       token = document.getElementById('tokenInput').value.trim();
-      attemptLogin();
-    });
-
-    async function attemptLogin() {
-      const res = await fetch('/api/staff/orders', { headers: { 'x-staff-token': token } });
-      if (!res.ok) {
-        document.getElementById('loginError').textContent = 'Token inválido. Tente novamente.';
+      const res = await fetch('/api/staff/orders', { headers: { 'x-staff-token': token } }).catch(() => null);
+      if (!res?.ok) {
+        document.getElementById('loginError').classList.remove('hidden');
+        document.getElementById('tokenInput').classList.add('shake');
+        setTimeout(() => document.getElementById('tokenInput').classList.remove('shake'), 300);
         return;
       }
       sessionStorage.setItem('staffToken', token);
-      loginScreen.style.display = 'none';
-      panel.style.display = 'block';
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('panel').classList.remove('hidden');
+      document.getElementById('newOrderBtn').classList.remove('hidden');
       initSocket();
+      loadTables();
       renderOrders(await res.json());
     }
 
     function initSocket() {
       socket = io();
       socket.on('connect', () => {
-        connDot.classList.remove('off');
-        connText.textContent = 'em tempo real';
+        document.getElementById('connDot').className = 'w-2 h-2 rounded-full bg-green-400 transition-colors duration-300';
+        document.getElementById('connText').textContent = 'em tempo real';
         socket.emit('join:staff', token);
       });
       socket.on('disconnect', () => {
-        connDot.classList.add('off');
-        connText.textContent = 'reconectando...';
+        document.getElementById('connDot').className = 'w-2 h-2 rounded-full bg-red-400 transition-colors duration-300';
+        document.getElementById('connText').textContent = 'reconectando...';
       });
-      socket.on('staff:new_order', () => refreshOrders());
-      socket.on('staff:status_changed', () => refreshOrders());
+      socket.on('staff:new_order', () => { refreshOrders(); ringBell(); showToast('🔔 Novo pedido chegou!', 'bg-brand'); });
+      socket.on('staff:status_changed', ({ tableLabel }) => { refreshOrders(); showToast(`✅ ${tableLabel} atualizado`); });
+    }
+
+    async function loadTables() {
+      const res = await fetch('/api/tables', { headers: { 'x-staff-token': token } });
+      const tables = await res.json();
+      const sel = document.getElementById('modalTable');
+      tables.forEach(t => {
+        const o = document.createElement('option');
+        o.value = t.code; o.textContent = t.label;
+        sel.appendChild(o);
+      });
+    }
+
+    function setTab(tab) {
+      currentTab = tab;
+      document.getElementById('tabAtivos').className = `tab-btn ${tab === 'ativos' ? 'active-tab' : 'text-cream/40 hover:text-cream/70'} px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200`;
+      document.getElementById('tabHistorico').className = `tab-btn ${tab === 'historico' ? 'active-tab' : 'text-cream/40 hover:text-cream/70'} px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200`;
+      refreshOrders();
     }
 
     async function refreshOrders() {
-      const res = await fetch('/api/staff/orders', { headers: { 'x-staff-token': token } });
+      const url = currentTab === 'historico' ? '/api/staff/orders/history' : '/api/staff/orders';
+      const res = await fetch(url, { headers: { 'x-staff-token': token } });
       if (res.ok) renderOrders(await res.json());
     }
 
     function renderOrders(orders) {
-      ordersList.innerHTML = '';
-      emptyState.style.display = orders.length === 0 ? 'block' : 'none';
+      const list = document.getElementById('ordersList');
+      const empty = document.getElementById('emptyState');
+      list.innerHTML = '';
+      empty.classList.toggle('hidden', orders.length > 0);
 
-      orders.forEach((order) => {
+      const count = orders.filter(o => o.status !== 'pronto').length;
+      document.getElementById('orderCount').textContent =
+        count > 0 ? `${count} pedido${count > 1 ? 's' : ''} ativo${count > 1 ? 's' : ''}` : 'Nenhum pedido ativo';
+
+      orders.forEach(order => {
+        const next = NEXT[order.status];
+        const timeAgo = getTimeAgo(order.created_at);
         const card = document.createElement('div');
-        card.className = 'order-card';
-
-        const nextStatus = NEXT_STATUS[order.status];
-        const itemsText = order.description || 'sem descrição';
-
+        card.className = 'slide-in bg-charcoal-soft border border-white/8 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3';
         card.innerHTML = `
-          <div class="meta">
-            <div class="table">${order.table_label} · #${order.id}</div>
-            <div class="desc">${itemsText}</div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-3 mb-1 flex-wrap">
+              <span class="font-semibold text-cream text-base">${order.table_label}</span>
+              <span class="text-xs font-mono text-cream/30">#${order.id}</span>
+              <span class="text-xs px-2.5 py-0.5 rounded-full border font-medium ${STATUS_COLORS[order.status]}">
+                ${STATUS_TEXT[order.status]}
+              </span>
+            </div>
+            <p class="text-cream/50 text-sm truncate">${order.description || 'Sem descrição'}</p>
+            <p class="text-cream/25 text-xs mt-1">${timeAgo}</p>
           </div>
-          <span class="badge state-${order.status}">${STATUS_TEXT[order.status]}</span>
-          ${nextStatus ? `<button class="action-btn" data-id="${order.id}" data-next="${nextStatus}">${NEXT_LABEL[order.status]}</button>` : ''}
+          ${next ? `
+          <button data-id="${order.id}" data-status="${next.status}"
+            class="action-btn flex-shrink-0 ${next.cls} text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all duration-200 w-full sm:w-auto text-center">
+            ${next.label}
+          </button>` : `
+          <span class="text-green-400/60 text-xs font-medium px-3 py-2 bg-green-500/10 rounded-xl border border-green-500/20 text-center">
+            Entregue ✓
+          </span>`}
         `;
-        ordersList.appendChild(card);
+        list.appendChild(card);
       });
 
-      document.querySelectorAll('button[data-id]').forEach((btn) => {
-        btn.addEventListener('click', () => updateStatus(btn.dataset.id, btn.dataset.next));
+      document.querySelectorAll('.action-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          btn.textContent = 'Salvando...';
+          await fetch(`/api/orders/${btn.dataset.id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'x-staff-token': token },
+            body: JSON.stringify({ status: btn.dataset.status }),
+          });
+          refreshOrders();
+        });
       });
     }
 
-    async function updateStatus(orderId, status) {
-      await fetch(`/api/orders/${orderId}/status`, {
-        method: 'PATCH',
+    function getTimeAgo(dateStr) {
+      const diff = Date.now() - new Date(dateStr).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'agora mesmo';
+      if (mins < 60) return `há ${mins} min`;
+      return `há ${Math.floor(mins/60)}h`;
+    }
+
+    function ringBell() {
+      const b = document.getElementById('bellIcon');
+      b.classList.add('bell');
+      setTimeout(() => b.classList.remove('bell'), 500);
+    }
+
+    function showToast(msg = '✅ Atualizado!', cls = 'bg-green-700') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = `fixed bottom-6 left-1/2 -translate-x-1/2 text-sm px-5 py-3 rounded-full shadow-xl transition-all duration-300 z-50 text-white whitespace-nowrap ${cls}`;
+      t.style.opacity = '1';
+      setTimeout(() => t.style.opacity = '0', 3000);
+    }
+
+    // Modal
+    document.getElementById('newOrderBtn').addEventListener('click', () => {
+      document.getElementById('newOrderModal').classList.remove('hidden');
+    });
+    function closeModal() { document.getElementById('newOrderModal').classList.add('hidden'); }
+    document.getElementById('newOrderModal').addEventListener('click', e => {
+      if (e.target === document.getElementById('newOrderModal')) closeModal();
+    });
+    document.getElementById('saveOrderBtn').addEventListener('click', async () => {
+      const table_code = document.getElementById('modalTable').value;
+      const description = document.getElementById('modalDesc').value.trim();
+      if (!description) { showToast('⚠️ Adicione uma descrição', 'bg-red-700'); return; }
+      const btn = document.getElementById('saveOrderBtn');
+      btn.disabled = true; btn.textContent = 'Salvando...';
+      await fetch('/api/orders', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-staff-token': token },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ table_code, description }),
       });
+      btn.disabled = false; btn.textContent = 'Registrar Pedido';
+      document.getElementById('modalDesc').value = '';
+      closeModal();
       refreshOrders();
-    }
+    });
 
-    if (token) attemptLogin();
+    if (token) login();
   </script>
 </body>
 </html>
