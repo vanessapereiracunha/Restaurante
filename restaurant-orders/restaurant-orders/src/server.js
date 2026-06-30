@@ -41,4 +41,19 @@ io.on('connection', (socket) => {
   });
 });
 
+// Roda o seed automaticamente se nao houver mesas cadastradas
+const queries = require('./db/queries');
+try {
+  const tables = queries.listTables();
+  if (tables.length === 0) {
+    console.log('Nenhuma mesa encontrada. Rodando seed automatico...');
+    for (let i = 1; i <= 10; i++) {
+      queries.createTable(`Mesa ${i}`);
+    }
+    console.log('Seed concluido: 10 mesas criadas.');
+  }
+} catch (e) {
+  console.error('Erro no seed automatico:', e.message);
+}
+
 server.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
